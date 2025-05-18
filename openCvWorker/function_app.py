@@ -38,7 +38,7 @@ def blob_trigger_opencv_processing_function(segmentBlob: func.InputStream):
     logging.info(f"File saved successfully {save_path}") 
           
     # Analyze video contents with open CV
-    output = analyze_video() # UNDER CONSTRUCTION
+    output = analyze_video(save_path) # UNDER CONSTRUCTION
 
     # Delete temporary video file
     os.remove(save_path)

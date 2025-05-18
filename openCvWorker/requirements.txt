@@ -3,3 +3,5 @@
 # Manually managing azure-functions-worker may cause unexpected issues
 
 azure-functions
+opencv-python # Full UI - only for debugging
+#opencv-python-headless # For Azure when deployed

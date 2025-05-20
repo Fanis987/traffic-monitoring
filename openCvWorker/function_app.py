@@ -40,6 +40,10 @@ def blob_trigger_opencv_processing_function(segmentBlob: func.InputStream):
     # Analyze video contents with open CV
     output = analyze_video(save_path) # UNDER CONSTRUCTION
 
+    # Send POST to alert-service (if necessary)
+
+    # Add Row to Azure storage Table
+
     # Delete temporary video file
     os.remove(save_path)
     logging.info("Temp file deleted")

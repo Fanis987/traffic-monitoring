@@ -35,6 +35,10 @@ def analyze_video(video_path):
         x_r, y_r, w_r, h_r = roi_coords_right_lane
         roi_right = frame[y_r:y_r+h_r, x_r:x_r+w_r]
 
+        # Detect bodies
+
+        # Condition
+
         # Draw ROI rectangles on the full frame and display them
         # Display will be removed when deploying to azure
         draw_rectangle(frame,x_l, w_l, y_l , h_l,(0, 255, 0))

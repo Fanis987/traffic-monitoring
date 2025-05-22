@@ -11,6 +11,8 @@ MIN_SPEED_KMH = 5
 MAX_DISTANCE = 50
 SPEED_LIMIT = 120
 
+# Model used for infernce: YOLO v8 nano, main task: Detection
+# https://docs.ultralytics.com/models/yolov8/#supported-tasks-and-modes
 model = YOLO("yolov8n.pt")
 
 def calibrate_pixels_per_meter():
@@ -21,6 +23,7 @@ def analyze_video(video_path, output_csv="vehicle_data.csv"):
     cap = cv2.VideoCapture(video_path)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 
+    # Regions of interest (ROI)  for the two lanes - (x, y, width, height)
     roi_y = 400
     roi_height = 140
     roi_width = 400
@@ -33,25 +36,33 @@ def analyze_video(video_path, output_csv="vehicle_data.csv"):
 
     PIXELS_PER_METER = calibrate_pixels_per_meter()
 
+    # Keeping track of information from the video segment
     vehicle_data = []
     previous_vehicles = {}
     current_track_id = 0
     frame_count = 0
 
+    # Looping through the frames of the video segment
     while True:
         ret, frame = cap.read()
         if not ret:
             break
 
+        # Using YOLO to infer the bounding boxes of vehicles and save them
         current_detections = []
-
         for roi_coords in [roi_coords_left_lane, roi_coords_right_lane]:
             x, y, w, h = roi_coords
             roi = frame[y:y+h, x:x+w]
+
+            # Passing ROI (ndarray) to YOLO
             results = model(roi)[0]
 
+            # Analyzing the results of the inference
             for box in results.boxes:
+                # top-left and bottom-right corner
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
+                
+                # FIltering based on the type of the vehicle detected
                 cls_id = int(box.cls.item())
                 if cls_id in [2, 3, 5, 7]:
                     current_detections.append({
@@ -62,13 +73,16 @@ def analyze_video(video_path, output_csv="vehicle_data.csv"):
         updated_vehicles = {}
         matched_ids = set()
 
-        for det in current_detections:
+        for det in current_detections: # Loop over detected vehicles in ROI
             best_match_id = None
             best_distance = float('inf')
+
+            # Calculation center of detected vehicle
             det_center = np.array([(det["bbox"][0] + det["bbox"][2]) / 2, 
                                    (det["bbox"][1] + det["bbox"][3]) / 2])
 
             for track_id, vehicle in previous_vehicles.items():
+                # Calcualting distance covered in this frame
                 if track_id in matched_ids:
                     continue
                 prev_center = np.array([(vehicle["bbox"][0] + vehicle["bbox"][2]) / 2,
@@ -79,6 +93,7 @@ def analyze_video(video_path, output_csv="vehicle_data.csv"):
                     best_distance = distance
                     best_match_id = track_id
 
+            # Saving the position and class of the detected object for this frame
             if best_match_id is not None:
                 updated_vehicles[best_match_id] = {
                     "bbox": det["bbox"],
@@ -99,6 +114,7 @@ def analyze_video(video_path, output_csv="vehicle_data.csv"):
         # Finalize exited vehicles
         for track_id, vehicle in previous_vehicles.items():
             if track_id not in updated_vehicles and len(vehicle["bbox_history"]) >= 2:
+                # Calculate the centers of the first and last position of the tracked object
                 first_bbox = vehicle["bbox_history"][0]
                 last_bbox = vehicle["bbox_history"][-1]
 
@@ -107,16 +123,21 @@ def analyze_video(video_path, output_csv="vehicle_data.csv"):
                 last_center = np.array([(last_bbox[0] + last_bbox[2]) / 2, 
                                         (last_bbox[1] + last_bbox[3]) / 2])
 
+                #norm???
                 displacement_pixels = np.linalg.norm(last_center - first_center)
+
+                # Extract the speed
                 displacement_meters = displacement_pixels / PIXELS_PER_METER
                 time_seconds = (frame_count - vehicle["first_frame"]) / FRAME_RATE
                 speed_kmh = (displacement_meters / time_seconds) * 3.6
 
-                if speed_kmh >= MIN_SPEED_KMH:
+                
+                if speed_kmh >= MIN_SPEED_KMH: # Removal of extremely slow objects
                     vehicle_types = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
                     vehicle_type = vehicle_types.get(vehicle["class"], "unknown")
                     lane = 0 if first_center[0] < width // 2 else 1
 
+                    # Saving the quantities of interest
                     vehicle_data.append({
                         "track_id": track_id,
                         "time_entered": vehicle["first_frame"] / FRAME_RATE,

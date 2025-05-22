@@ -11,7 +11,7 @@ MIN_SPEED_KMH = 5
 MAX_DISTANCE = 50
 SPEED_LIMIT = 120
 
-# Model used for infernce: YOLO v8 nano, main task: Detection
+# Model used for inference: YOLO v8 nano, main task: Detection
 # https://docs.ultralytics.com/models/yolov8/#supported-tasks-and-modes
 model = YOLO("yolov8n.pt")
 
@@ -111,7 +111,7 @@ def analyze_video(video_path, output_csv="vehicle_data.csv"):
                     "class": det["class"]
                 }
 
-        # Finalize exited vehicles
+        # Finalize exited vehicles per frame
         for track_id, vehicle in previous_vehicles.items():
             if track_id not in updated_vehicles and len(vehicle["bbox_history"]) >= 2:
                 # Calculate the centers of the first and last position of the tracked object
@@ -123,7 +123,7 @@ def analyze_video(video_path, output_csv="vehicle_data.csv"):
                 last_center = np.array([(last_bbox[0] + last_bbox[2]) / 2, 
                                         (last_bbox[1] + last_bbox[3]) / 2])
 
-                #norm???
+                
                 displacement_pixels = np.linalg.norm(last_center - first_center)
 
                 # Extract the speed
@@ -150,7 +150,7 @@ def analyze_video(video_path, output_csv="vehicle_data.csv"):
 
         previous_vehicles = updated_vehicles
         frame_count += 1
-
+ 
         # Draw ROIs
         draw_rectangle(frame, *roi_coords_left_lane, (0, 255, 0))
         draw_rectangle(frame, *roi_coords_right_lane, (255, 0, 0))

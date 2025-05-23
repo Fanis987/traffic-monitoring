@@ -19,11 +19,14 @@ def calibrate_pixels_per_meter():
     return (280 - 140) / LANE_DISTANCE_METERS  # Adjusted upper and lower y-limits
 
 def analyze_video(video_path, output_csv="vehicle_data.csv"):
+    """
+    Main function that uses open CV and YOLO model to analyze video segments
+    """
     logging.info("Analysis started")
     cap = cv2.VideoCapture(video_path)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 
-    # Regions of interest (ROI)  for the two lanes - (x, y, width, height)
+    # Defining regions of interest (ROI)  for the two lanes - (x, y, width, height)
     roi_y = 400
     roi_height = 140
     roi_width = 400
@@ -49,26 +52,7 @@ def analyze_video(video_path, output_csv="vehicle_data.csv"):
             break
 
         # Using YOLO to infer the bounding boxes of vehicles and save them
-        current_detections = []
-        for roi_coords in [roi_coords_left_lane, roi_coords_right_lane]:
-            x, y, w, h = roi_coords
-            roi = frame[y:y+h, x:x+w]
-
-            # Passing ROI (ndarray) to YOLO
-            results = model(roi)[0]
-
-            # Analyzing the results of the inference
-            for box in results.boxes:
-                # top-left and bottom-right corner
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                
-                # FIltering based on the type of the vehicle detected
-                cls_id = int(box.cls.item())
-                if cls_id in [2, 3, 5, 7]:
-                    current_detections.append({
-                        "bbox": (x1 + x, y1 + y, x2 + x, y2 + y),
-                        "class": cls_id
-                    })
+        current_detections = detect_vehicles_with_YOLO(frame,roi_coords_left_lane, roi_coords_right_lane)
 
         updated_vehicles = {}
         matched_ids = set()
@@ -154,18 +138,8 @@ def analyze_video(video_path, output_csv="vehicle_data.csv"):
         # Draw ROIs
         draw_rectangle(frame, *roi_coords_left_lane, (0, 255, 0))
         draw_rectangle(frame, *roi_coords_right_lane, (255, 0, 0))
-
         # Draw bounding boxes and info
-        for track_id, vehicle in previous_vehicles.items():
-            x1, y1, x2, y2 = vehicle["bbox"]
-            cls = vehicle["class"]
-            vehicle_types = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
-            label = f"ID:{track_id} {vehicle_types.get(cls, 'unknown')}"
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-            cv2.putText(frame, label, (x1, y1 - 10), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-
-        cv2.imshow('Processed Frame', frame)
+        draw_in_frame(frame,previous_vehicles)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
@@ -173,13 +147,52 @@ def analyze_video(video_path, output_csv="vehicle_data.csv"):
     cv2.destroyAllWindows()
 
     # Export CSV
+    export_result_to_csv(vehicle_data, output_csv)
+#END
+
+# Helper function taht uses YOLO of object detection
+def detect_vehicles_with_YOLO(frame,roi_coords_left_lane, roi_coords_right_lane) -> list:
+    current_detections = []
+    for roi_coords in [roi_coords_left_lane, roi_coords_right_lane]:
+        x, y, w, h = roi_coords
+        roi = frame[y:y+h, x:x+w]
+        # Passing ROI (ndarray) to YOLO
+        results = model(roi)[0]
+
+        # Analyzing the results of the inference
+        for box in results.boxes:
+            # top-left and bottom-right corner
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+              
+            # Filtering based on the type of the vehicle detected
+            cls_id = int(box.cls.item())
+            if cls_id in [2, 3, 5, 7]:
+                current_detections.append({
+                    "bbox": (x1 + x, y1 + y, x2 + x, y2 + y),
+                    "class": cls_id
+                })
+    return current_detections
+
+# Helper function to draw 
+def draw_in_frame(frame,previous_vehicles: dict):
+    for track_id, vehicle in previous_vehicles.items():
+        x1, y1, x2, y2 = vehicle["bbox"]
+        cls = vehicle["class"]
+        vehicle_types = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
+        label = f"ID:{track_id} {vehicle_types.get(cls, 'unknown')}"
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+        cv2.putText(frame, label, (x1, y1 - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
+        cv2.imshow('Processed Frame', frame)
+     
+def draw_rectangle(frame, x, y, w, h, color):
+    cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+
+# Helper function to export results to csv
+def export_result_to_csv(vehicle_data: list, output_csv):
     df = pd.DataFrame(vehicle_data)
     df.to_csv(output_csv, index=False)
     logging.info(f"Saved CSV to {output_csv}")
-
-
-def draw_rectangle(frame, x, y, w, h, color):
-    cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
 
 
 # Run it

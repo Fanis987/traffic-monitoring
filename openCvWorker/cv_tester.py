@@ -1,4 +1,4 @@
-from openCvHelper import analyze_video
+from process import analyze_video
 
-video_path = "vid_segment.mp4"
+video_path = "clip_0.mp4"
 analyze_video(video_path)

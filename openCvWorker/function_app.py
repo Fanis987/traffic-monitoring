@@ -2,15 +2,9 @@ import azure.functions as func
 import logging
 import os
 import tempfile
-from openCvHelper import analyze_video
+from process import analyze_video
 
 app = func.FunctionApp()
-
-# @app.function_name(name="HttpTrigger")
-# @app.route(route="hello")
-# def http_trigger(req: func.HttpRequest) -> func.HttpResponse:
-#     name = req.params.get("name", "World")
-#     return func.HttpResponse(f"Hello, {name}!", status_code=200)
 
 """
 Azure function to process with open CV

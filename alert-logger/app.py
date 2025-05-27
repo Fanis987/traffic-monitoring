@@ -1,13 +1,24 @@
 from flask import Flask, request, jsonify
 import logging
+import sys
 
 app = Flask(__name__)
 
-# Set up basic logger
-logging.basicConfig(level=logging.INFO)
+# Configure logger to output to stdout for Azure logging
 logger = logging.getLogger("alert-logger")
+logger.setLevel(logging.WARNING)
 
-#Standard route
+if logger.hasHandlers():
+    logger.handlers.clear()
+
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.WARNING)
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+console_handler.setFormatter(formatter)
+
+logger.addHandler(console_handler)
+
+# Standard route
 @app.route("/")
 def hello():
     return "Hello, This is the alert key logger app!"

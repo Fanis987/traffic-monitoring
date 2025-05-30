@@ -31,10 +31,10 @@ def receive_alert():
         return jsonify({"error": "Invalid or missing JSON"}), 400
 
     try:
-        vehicle_id = data["ID"]
-        time = data["Time"]
+        vehicle_id = data["vehicleId"]
+        time = data["timeEntered"]
         speed = data["speed"]
-        vehicle_type = data["Vehicle"]
+        vehicle_type = data["vehicleType"]
     except KeyError as e:
         return jsonify({"error": f"Missing field: {e}"}), 400
 
@@ -51,10 +51,10 @@ def receive_alerts():
 
     for vehicle in data:
         try:
-            vehicle_id = vehicle["ID"]
-            time = vehicle["Time"]
+            vehicle_id = vehicle["vehicleId"]
+            time = vehicle["timeEntered"]
             speed = vehicle["speed"]
-            vehicle_type = vehicle["Vehicle"]
+            vehicle_type = vehicle["vehicleType"]
         except KeyError as e:
             return jsonify({"error": f"Missing field in one of the list items: {e}"}), 400
 

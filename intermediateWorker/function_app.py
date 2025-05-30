@@ -1,11 +1,10 @@
 import azure.functions as func
-import datetime
-import json
 import logging
 import csv
 import io
 import pyodbc
 import os
+import requests
 
 app = func.FunctionApp()
 
@@ -16,13 +15,18 @@ app = func.FunctionApp()
                   connection="AzureWebJobsStorage") 
 def BlobTriggerFunc(uploadedFile: func.InputStream):
     
+    # Check for env variables
+    ALERT_WEB_APP_URL = os.getenv("ALERT_WEB_APP_URL")
+    if(ALERT_WEB_APP_URL == None):
+        logging.error(f"The URL of the alert-logger Azure web app could not be found!")
+        return
+    
+    SQL_STORAGE_CONN_STRING = os.getenv("SQL_STORAGE_CONN_STRING")
+    if(SQL_STORAGE_CONN_STRING == None):
+        logging.error(f"The connection string to Azure SQL Storage could not be found ")
+        return
+    
     try:
-        # Get Connnction String to SQL Storage
-        SQL_STORAGE_CONN_STRING = os.getenv("SQL_STORAGE_CONN_STRING")
-        if(SQL_STORAGE_CONN_STRING == None):
-            logging.error(f"The connection string to Azure SQL Storage could not be found ")
-            return
-
         # Parsing the uploaded CSV file
         blob_text = uploadedFile.read().decode('utf-8')
         vehicle_records_list = []
@@ -44,14 +48,36 @@ def BlobTriggerFunc(uploadedFile: func.InputStream):
         if(vehicle_records_num == 0):
             logging.error(f"The uploaded file had no info on vehicles ")
             return
-        logging.info(f"Found {vehicle_records_num} vehicle records")
+        logging.info(f"Parsed {vehicle_records_num} vehicle records from csv")
+
+        # Filtering out the speeding vehicles for the alert
+        speeding_vehicles = []
+        for rec in vehicle_records_list:
+            if rec[5] == 1: # speeding column
+                vehicle_dict = {
+                    "vehicleId": rec[0],
+                    "timeEntered": rec[1],
+                    "speed": rec[2],
+                    "vehicleType": rec[3]
+                }
+                speeding_vehicles.append(vehicle_dict)
 
         # Try to send the extracted data to Azure SQL storage
         (upload_suceeded,error_msg) = save_data_to_SQL_storage(SQL_STORAGE_CONN_STRING, vehicle_records_list)
         if(not upload_suceeded):
             logging.error(f"Could not upload data to Azure storage: {error_msg}")
             return
-        logging.info(f"Added {vehicle_records_num} rows to SQL Storage Table")
+        logging.info(f"Added {vehicle_records_num} rows to remote SQL Storage Table")
+
+        # Try posting to alert logger web app
+        if(len(speeding_vehicles) == 0):
+            logging.info(f"No speeding vehicles found, no need to POST to alert logger web app")
+            return
+        
+        (alert_successful, error_msg) = send_alert(ALERT_WEB_APP_URL, speeding_vehicles)
+        if(not alert_successful):
+            logging.error(f"Could not reach alert service web app: {error_msg}")
+            return
 
     
     except KeyError:
@@ -84,3 +110,20 @@ def save_data_to_SQL_storage(conn_str: str, data_rows: list ) -> tuple[bool, str
     except Exception as e:
         return (False,f"Connection Error: {e}")
     
+
+# Helper function to send HTTP Request to the alert logger web app
+def send_alert(app_url : str, alert_data) -> tuple[bool, str]:
+    
+    try:
+        headers = {
+            "Content-Type": "application/json"
+        }
+
+        logging.info(f"Sending POST to Alert web app")
+        response = requests.post(app_url, json=alert_data, headers=headers)
+
+        logging.info(f"Alert web app responded with code: {response.status_code} \n {response.text}")
+        return (True,"")
+    
+    except Exception as e:
+        return (False,f"Connection Error: {e}")

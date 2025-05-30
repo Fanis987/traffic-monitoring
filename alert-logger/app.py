@@ -33,7 +33,6 @@ def receive_alert():
     try:
         vehicle_id = data["ID"]
         time = data["Time"]
-        entered = data["Entered"]
         speed = data["speed"]
         vehicle_type = data["Vehicle"]
     except KeyError as e:
@@ -54,7 +53,6 @@ def receive_alerts():
         try:
             vehicle_id = vehicle["ID"]
             time = vehicle["Time"]
-            entered = vehicle["Entered"]
             speed = vehicle["speed"]
             vehicle_type = vehicle["Vehicle"]
         except KeyError as e:

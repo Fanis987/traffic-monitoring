@@ -81,7 +81,7 @@ def analyse_clip(video_path, csv_output_path, show_video=False):
     last_positions = {}
 
     # Output storage
-    columns = ['Id', 'timeEntered', 'speed', 'vehicleType', 'lane', 'speeding']
+    columns = ['vehicleId', 'timeEntered', 'speed', 'vehicleType', 'lane', 'speeding']
     vehicle_data = []
 
     def crossed_line(prev_y, curr_y, line_y):
@@ -143,7 +143,7 @@ def analyse_clip(video_path, csv_output_path, show_video=False):
                                 continue
 
                             vehicle_type = "car" if cls_id == 2 else "truck"
-                            speeding = (speed > CAR_LIMIT) if cls_id == 2 else (speed > TRUCK_LIMIT)
+                            speeding = int((speed > CAR_LIMIT) if cls_id == 2 else (speed > TRUCK_LIMIT))
                             time_seconds = (entry_frames_left[track_id] / fps) + clip_number*120
                             vehicle_data.append([track_id, round(time_seconds, 2), round(speed, 1), vehicle_type, "out", speeding])
                             counted_left.add(track_id)
@@ -165,7 +165,7 @@ def analyse_clip(video_path, csv_output_path, show_video=False):
                                 continue
 
                             vehicle_type = "car" if cls_id == 2 else "truck"
-                            speeding = (speed > CAR_LIMIT) if cls_id == 2 else (speed > TRUCK_LIMIT)
+                            speeding = int((speed > CAR_LIMIT) if cls_id == 2 else (speed > TRUCK_LIMIT))
                             time_seconds = (entry_frames_right[track_id] / fps) + clip_number*120
                             vehicle_data.append([track_id, round(time_seconds, 2), round(speed, 1), vehicle_type, "in", speeding])
                             counted_right.add(track_id)

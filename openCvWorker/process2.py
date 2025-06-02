@@ -214,5 +214,3 @@ def analyse_clip(video_path, csv_output_path, show_video=False):
     print(f"Right lane vehicles: {len(counted_right)}")
     print(f"Dismissed vehicles: {len(dismissed_vehicles)}")
     print(f"Results saved to: {csv_output_path}")
-    
-    return df

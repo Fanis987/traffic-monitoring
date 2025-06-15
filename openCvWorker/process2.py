@@ -57,11 +57,15 @@ def analyse_clip(video_path, csv_output_path, show_video=False):
     roi_length_m = 10.0
 
     # Maximum allowed speed to dismiss vehicles (e.g., glitch)
-    MAX_SPEED_THRESHOLD = 250.0
+    MAX_SPEED_THRESHOLD_CAR = 300.0
+    MAX_SPEED_THRESHOLD_TRUCK = 200.0
 
     # Speed limits
     CAR_LIMIT = 90.0
     TRUCK_LIMIT = 80.0
+
+    # Minimum time in frames to consider a valid crossing
+    MIN_TIME_FRAMES = 5
 
     # Get FPS
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -134,9 +138,9 @@ def analyse_clip(video_path, csv_output_path, show_video=False):
                     if crossed_line(prev_pos[1], cy, line_y_left):
                         exit_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
                         time_frames = exit_frame - entry_frames_left[track_id]
-                        if time_frames > 0:
+                        if time_frames > MIN_TIME_FRAMES:
                             speed = (roi_length_m / (time_frames / fps)) * 3.6
-                            if speed > MAX_SPEED_THRESHOLD:
+                            if speed > (MAX_SPEED_THRESHOLD_CAR if cls_id == 2 else MAX_SPEED_THRESHOLD_TRUCK):
                                 dismissed_vehicles.add(track_id)
                                 entry_frames_left.pop(track_id, None)
                                 print(f"Vehicle ID {track_id} dismissed - unrealistic speed: {speed:.1f} km/h")
@@ -147,6 +151,11 @@ def analyse_clip(video_path, csv_output_path, show_video=False):
                             time_seconds = (entry_frames_left[track_id] / fps) + clip_number*120
                             vehicle_data.append([track_id, round(time_seconds, 2), round(speed, 1), vehicle_type, "out", speeding])
                             counted_left.add(track_id)
+                        else:
+                            print(f"Vehicle ID {track_id} dismissed - too short time: {time_frames} frames")
+                            dismissed_vehicles.add(track_id)
+                            entry_frames_left.pop(track_id, None)
+                            continue
 
                 # RIGHT
                 if inside_right and track_id not in entry_frames_right:
@@ -156,9 +165,9 @@ def analyse_clip(video_path, csv_output_path, show_video=False):
                     if crossed_line(prev_pos[1], cy, line_y_right):
                         exit_frame = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
                         time_frames = exit_frame - entry_frames_right[track_id]
-                        if time_frames > 0:
+                        if time_frames > MIN_TIME_FRAMES:
                             speed = (roi_length_m / (time_frames / fps)) * 3.6
-                            if speed > MAX_SPEED_THRESHOLD:
+                            if speed > (MAX_SPEED_THRESHOLD_CAR if cls_id == 2 else MAX_SPEED_THRESHOLD_TRUCK):
                                 dismissed_vehicles.add(track_id)
                                 entry_frames_right.pop(track_id, None)
                                 print(f"Vehicle ID {track_id} dismissed - unrealistic speed: {speed:.1f} km/h")
@@ -169,6 +178,11 @@ def analyse_clip(video_path, csv_output_path, show_video=False):
                             time_seconds = (entry_frames_right[track_id] / fps) + clip_number*120
                             vehicle_data.append([track_id, round(time_seconds, 2), round(speed, 1), vehicle_type, "in", speeding])
                             counted_right.add(track_id)
+                        else:
+                            print(f"Vehicle ID {track_id} dismissed - too short time: {time_frames} frames")
+                            dismissed_vehicles.add(track_id)
+                            entry_frames_right.pop(track_id, None)
+                            continue
 
                 # Draw bounding box (only if showing video)
                 if show_video:

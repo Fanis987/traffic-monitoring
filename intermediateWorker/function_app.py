@@ -5,125 +5,117 @@ import io
 import pyodbc
 import os
 import requests
+from azure.storage.blob import BlobServiceClient
 
 app = func.FunctionApp()
 
+@app.function_name(name="HttpTriggerFunc")
+@app.route(route="process", auth_level=func.AuthLevel.ANONYMOUS)
+def HttpTriggerFunc(req: func.HttpRequest) -> func.HttpResponse:
+    logging.info('HTTP trigger function to process a blob file by filename.')
 
-# Blob trigger that waits for csv files from csv workers and processes them
-@app.blob_trigger(arg_name="uploadedFile", 
-                  path="intermediate-results/{name}.csv", #non-csv filtered out
-                  connection="AzureWebJobsStorage") 
-def BlobTriggerFunc(uploadedFile: func.InputStream):
-    
-    # Check for env variables
+    # Extract filename
+    filename = req.params.get('filename')
+    if not filename:
+        try:
+            req_body = req.get_json()
+            filename = req_body.get('filename')
+        except ValueError:
+            pass
+
+    if not filename:
+        return func.HttpResponse("Please pass a 'filename' parameter in the query or body.", status_code=400)
+
+    # Environment variables
     ALERT_WEB_APP_URL = os.getenv("ALERT_WEB_APP_URL")
-    if(ALERT_WEB_APP_URL == None):
-        logging.error(f"The URL of the alert-logger Azure web app could not be found!")
-        return
-    
     SQL_STORAGE_CONN_STRING = os.getenv("SQL_STORAGE_CONN_STRING")
-    if(SQL_STORAGE_CONN_STRING == None):
-        logging.error(f"The connection string to Azure SQL Storage could not be found ")
-        return
-    
-    try:
-        # Parsing the uploaded CSV file
-        blob_text = uploadedFile.read().decode('utf-8')
-        vehicle_records_list = []
+    BLOB_CONN_STRING = os.getenv("AzureWebJobsStorage")
+    BLOB_CONTAINER_NAME = "intermediate-results"
 
-        # Read each csv line into TUPLE and store it to list
-        reader = csv.DictReader(io.StringIO(blob_text))
+    if not ALERT_WEB_APP_URL or not SQL_STORAGE_CONN_STRING or not BLOB_CONN_STRING:
+        return func.HttpResponse("Missing required environment variables.", status_code=500)
+
+    try:
+        # Connect to blob storage and download the file
+        blob_service_client = BlobServiceClient.from_connection_string(BLOB_CONN_STRING)
+        blob_client = blob_service_client.get_blob_client(container=BLOB_CONTAINER_NAME, blob=filename)
+
+        if not blob_client.exists():
+            return func.HttpResponse(f"Blob file '{filename}' not found in container.", status_code=404)
+
+        blob_data = blob_client.download_blob().readall().decode('utf-8')
+
+        vehicle_records_list = []
+        reader = csv.DictReader(io.StringIO(blob_data))
+
         for row in reader:
             record = (
-            int(row['vehicleId']),
-            float(row['timeEntered']),
-            float(row['speed']),
-            row['vehicleType'],
-            row['lane'],
-            int(row['speeding']))
+                int(row['vehicleId']),
+                float(row['timeEntered']),
+                float(row['speed']),
+                row['vehicleType'],
+                row['lane'],
+                int(row['speeding'])
+            )
             vehicle_records_list.append(record)
 
-        # Checking the number of records found
-        vehicle_records_num : int = len(vehicle_records_list)
-        if(vehicle_records_num == 0):
-            logging.error(f"The uploaded file had no info on vehicles ")
-            return
-        logging.info(f"Parsed {vehicle_records_num} vehicle records from csv")
+        if not vehicle_records_list:
+            return func.HttpResponse("CSV file has no records.", status_code=400)
 
-        # Filtering out the speeding vehicles for the alert
-        speeding_vehicles = []
-        for rec in vehicle_records_list:
-            if rec[5] == 1: # speeding column
-                vehicle_dict = {
-                    "vehicleId": rec[0],
-                    "timeEntered": rec[1],
-                    "speed": rec[2],
-                    "vehicleType": rec[3]
-                }
-                speeding_vehicles.append(vehicle_dict)
+        # Save to SQL
+        upload_succeeded, error_msg = save_data_to_SQL_storage(SQL_STORAGE_CONN_STRING, vehicle_records_list)
+        if not upload_succeeded:
+            return func.HttpResponse(f"SQL error: {error_msg}", status_code=500)
 
-        # Try to send the extracted data to Azure SQL storage
-        (upload_suceeded,error_msg) = save_data_to_SQL_storage(SQL_STORAGE_CONN_STRING, vehicle_records_list)
-        if(not upload_suceeded):
-            logging.error(f"Could not upload data to Azure storage: {error_msg}")
-            return
-        logging.info(f"Added {vehicle_records_num} rows to remote SQL Storage Table")
+        # Check for speeding vehicles
+        speeding_vehicles = [
+            {
+                "vehicleId": rec[0],
+                "timeEntered": rec[1],
+                "speed": rec[2],
+                "vehicleType": rec[3]
+            }
+            for rec in vehicle_records_list if rec[5] == 1
+        ]
 
-        # Try posting to alert logger web app
-        if(len(speeding_vehicles) == 0):
-            logging.info(f"No speeding vehicles found, no need to POST to alert logger web app")
-            return
-        
-        (alert_successful, error_msg) = send_alert(ALERT_WEB_APP_URL, speeding_vehicles)
-        if(not alert_successful):
-            logging.error(f"Could not reach alert service web app: {error_msg}")
-            return
+        if speeding_vehicles:
+            alert_successful, alert_error = send_alert(ALERT_WEB_APP_URL, speeding_vehicles)
+            if not alert_successful:
+                return func.HttpResponse(f"Alert failed: {alert_error}", status_code=500)
 
-    
-    except KeyError:
-        logging.error(f"The uploaded csv file had incorrect headers ")
-        return
-    
+        return func.HttpResponse(
+            f"Successfully processed {len(vehicle_records_list)} records. "
+            f"{len(speeding_vehicles)} speeding vehicles found.",
+            status_code=200
+        )
+
     except Exception as e:
-        logging.error(f"Exception occured: {e} ")
-        return
-    
+        logging.error(f"Exception occurred: {e}")
+        return func.HttpResponse(f"Internal error: {e}", status_code=500)
 
-# Helper function for writing data to Azure SQL storage
-def save_data_to_SQL_storage(conn_str: str, data_rows: list ) -> tuple[bool, str]:
-     
+
+# Helper functions remain exactly the same as in your original code
+def save_data_to_SQL_storage(conn_str: str, data_rows: list) -> tuple[bool, str]:
     insert_query = """
         INSERT INTO vehicledata (vehicleId, timeEntered, speed, vehicletype, lane, speeding)
         VALUES (?, ?, ?, ?, ?, ?)
     """
-
     try:
-        # TRy coonnecting with Azure Storage via ODBC
         with pyodbc.connect(conn_str) as conn:
             with conn.cursor() as cursor:
-                cursor.fast_executemany = True  # improves execute many performance
+                cursor.fast_executemany = True
                 cursor.executemany(insert_query, data_rows)
-                
-                conn.commit() # BATCH commit
-                return (True,"")
-                
+                conn.commit()
+                return (True, "")
     except Exception as e:
-        return (False,f"Connection Error: {e}")
-    
+        return (False, f"Connection Error: {e}")
 
-# Helper function to send HTTP Request to the alert logger web app
-def send_alert(app_url : str, alert_data) -> tuple[bool, str]:
-    
+def send_alert(app_url: str, alert_data) -> tuple[bool, str]:
     try:
-        headers = {
-            "Content-Type": "application/json"
-        }
-
-        logging.info(f"Sending POST to Alert web app")
+        headers = {"Content-Type": "application/json"}
+        logging.info("Sending POST to Alert web app")
         response = requests.post(app_url, json=alert_data, headers=headers)
-
-        logging.info(f"Alert web app responded with code: {response.status_code} \n {response.text}")
-        return (True,"")
-    
+        logging.info(f"Alert web app responded with code: {response.status_code}\n{response.text}")
+        return (True, "")
     except Exception as e:
-        return (False,f"Connection Error: {e}")
+        return (False, f"Connection Error: {e}")

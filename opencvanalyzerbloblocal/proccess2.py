@@ -2,6 +2,7 @@ import cv2
 import pandas as pd
 from ultralytics import YOLO
 import os
+import re
 
 def analyse_clip(video_path, csv_output_path, show_video=False):
     """
@@ -30,11 +31,13 @@ def analyse_clip(video_path, csv_output_path, show_video=False):
     # Get the base name without extension
     base = os.path.splitext(video_path)[0] #videos_clips_csvs/10s_clips/clip_0
 
-    # Get the last character
-    last_char = base[-1]  # '0'
-
-    # Convert to integer if needed
-    clip_number = int(last_char)
+    # Use regex to find the number at the end of the base name
+    match = re.search(r'(\d+)$', base)
+    if match:
+        clip_number = int(match.group(1))
+        print("Clip number:", clip_number)
+    else:
+        print("No number found in file name.")
 
     # Load YOLOv8 model
     model = YOLO('yolov8n.pt')

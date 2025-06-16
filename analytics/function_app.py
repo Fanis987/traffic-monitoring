@@ -45,7 +45,7 @@ app = func.FunctionApp()
 #===================== MAIN AZURE FUNCTIONS =========================================================================
 
 # Query 1: Get number of vehicles per lane
-@app.route(route="Q1", auth_level=func.AuthLevel.FUNCTION)
+@app.route(route="Q1", auth_level=func.AuthLevel.ANONYMOUS)
 def GetVehPerLane(req: func.HttpRequest) -> func.HttpResponse:
     
     # Get necessary env variables
@@ -67,7 +67,7 @@ def GetVehPerLane(req: func.HttpRequest) -> func.HttpResponse:
 
 
 # Query 2: Count the total speeding vehicles
-@app.route(route="Q2", auth_level=func.AuthLevel.FUNCTION)
+@app.route(route="Q2", auth_level=func.AuthLevel.ANONYMOUS)
 def CountSpdVeh(req: func.HttpRequest) -> func.HttpResponse:
     
     # Get necessary env variables
@@ -89,7 +89,7 @@ def CountSpdVeh(req: func.HttpRequest) -> func.HttpResponse:
 
 
 # Query 3: Count the vehicles per 5 min per lane
-@app.route(route="Q3", auth_level=func.AuthLevel.FUNCTION)
+@app.route(route="Q3", auth_level=func.AuthLevel.ANONYMOUS)
 def CntVehPerTimeAndLane(req: func.HttpRequest) -> func.HttpResponse:
     
     # Get necessary env variables
@@ -111,7 +111,7 @@ def CntVehPerTimeAndLane(req: func.HttpRequest) -> func.HttpResponse:
 
 
 # Query 4: Find the average speed per lane per 5 mins
-@app.route(route="Q4", auth_level=func.AuthLevel.FUNCTION)
+@app.route(route="Q4", auth_level=func.AuthLevel.ANONYMOUS)
 def AvgSpdPerTimeAndLane(req: func.HttpRequest) -> func.HttpResponse:
     
     # Get necessary env variables

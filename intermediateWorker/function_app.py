@@ -75,7 +75,7 @@ def HttpTriggerFunc(req: func.HttpRequest) -> func.HttpResponse:
                 "speed": rec[2],
                 "vehicleType": rec[3]
             }
-            for rec in vehicle_records_list if rec[5] == 1
+            for rec in vehicle_records_list if rec[2] > 130
         ]
 
         if speeding_vehicles:
